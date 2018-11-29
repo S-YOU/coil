@@ -1,0 +1,91 @@
+kind: ConfigMap
+apiVersion: v1
+metadata:
+  name: http-proxy-config
+  namespace: dmz
+data:
+  squid.conf: |-
+    acl bootserver src 10.0.0.0/24
+    acl CONNECT method CONNECT
+    acl Safe_ports port 1025-65535  # unregistered ports
+    acl Safe_ports port 210         # wais
+    acl Safe_ports port 21          # ftp
+    acl Safe_ports port 280         # http-mgmt
+    acl Safe_ports port 443         # https
+    acl Safe_ports port 488         # gss-http
+    acl Safe_ports port 591         # filemaker
+    acl Safe_ports port 70          # gopher
+    acl Safe_ports port 777         # multiling http
+    acl Safe_ports port 80          # http
+    acl SSL_ports port 443
+    coredump_dir /var/spool/squid
+    http_access allow localhost
+    http_access allow localhost manager
+    http_access allow bootserver
+    http_access deny all
+    http_access deny CONNECT !SSL_ports
+    http_access deny manager
+    http_access deny !Safe_ports
+    http_port 3128
+    refresh_pattern .               0       20%     4320
+    refresh_pattern ^ftp:           1440    20%     10080
+    refresh_pattern ^gopher:        1440    0%      1440
+    refresh_pattern -i (/cgi-bin/|\?) 0     0%      0
+    refresh_pattern (Release|Packages(.gz)*)$      0       20%     2880
+
+    cache_dir aufs /var/spool/squid 100 16 256
+---
+kind: Deployment
+apiVersion: apps/v1
+metadata:
+  name: http-proxy
+  namespace: dmz
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      k8s-app: http-proxy
+  template:
+    metadata:
+      name: http-proxy
+      namespace: dmz
+      labels:
+        k8s-app: http-proxy
+    spec:
+      containers:
+        - name: squid
+          image: quay.io/cybozu/squid:3.5.27-1-1
+          volumeMounts:
+            - mountPath: /var/log/squid
+              name: log
+            - mountPath: /var/spool/squid
+              name: cache
+            - mountPath: /etc/squid
+              name: config
+          ports:
+            - containerPort: 3128
+      volumes:
+        - name: log
+          emptyDir: {}
+        - name: cache
+          emptyDir: {}
+        - name: config
+          configMap:
+            name: http-proxy-config
+            items:
+              - key: squid.conf
+                path: squid.conf
+---
+kind: Service
+apiVersion: v1
+metadata:
+  name: http-proxy
+  namespace: dmz
+spec:
+  selector:
+    k8s-app: http-proxy
+  ports:
+    - name: http-proxy
+      port: 3128
+      protocol: TCP
+      targetPort: 3128
