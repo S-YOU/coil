@@ -28,6 +28,10 @@ files:
     file: rbac.yml
   - name: deploy.yml
     file: deploy.yml
+  - name: dns-cache.yml
+    file: dns-cache.yml
+  - name: http-proxy.yml
+    file: http-proxy.yml
 ---
 kind: DataFolder
 name: node1

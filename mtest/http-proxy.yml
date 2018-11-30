@@ -5,7 +5,10 @@ metadata:
   namespace: dmz
 data:
   squid.conf: |-
-    acl bootserver src 10.0.0.0/24
+    acl bootservers src 10.0.0.0/24
+    acl workers src 10.0.0.0/24
+    acl pods_default src 10.0.1.0/24
+    acl pods_dmz src 10.0.3.0/24
     acl CONNECT method CONNECT
     acl Safe_ports port 1025-65535  # unregistered ports
     acl Safe_ports port 210         # wais
@@ -21,7 +24,10 @@ data:
     coredump_dir /var/spool/squid
     http_access allow localhost
     http_access allow localhost manager
-    http_access allow bootserver
+    http_access allow bootservers
+    http_access allow workers
+    http_access allow pods_default
+    http_access allow pods_dmz
     http_access deny all
     http_access deny CONNECT !SSL_ports
     http_access deny manager
@@ -32,7 +38,7 @@ data:
     refresh_pattern ^gopher:        1440    0%      1440
     refresh_pattern -i (/cgi-bin/|\?) 0     0%      0
     refresh_pattern (Release|Packages(.gz)*)$      0       20%     2880
-
+    access_log stdio:/var/log/squid/access.log
     cache_dir aufs /var/spool/squid 100 16 256
 ---
 kind: Deployment
@@ -42,6 +48,10 @@ metadata:
   namespace: dmz
 spec:
   replicas: 2
+#  strategy:
+#    type: RollingUpdate
+#    rollingUpdate:
+#      maxUnavailable: 1
   selector:
     matchLabels:
       k8s-app: http-proxy
@@ -52,21 +62,41 @@ spec:
       labels:
         k8s-app: http-proxy
     spec:
+#      tolerations:
+#        - key: node-role.kubernetes.io/master
+#          effect: NoSchedule
+#        - key: CriticalAddonsOnly
+#          operator: Exists
       containers:
         - name: squid
-          image: quay.io/cybozu/squid:3.5.27-1-1
+          image: quay.io/mitz/squid:3.5.27-1-2
+          imagePullPolicy: IfNotPresent
           volumeMounts:
-            - mountPath: /var/log/squid
-              name: log
             - mountPath: /var/spool/squid
               name: cache
             - mountPath: /etc/squid
               name: config
           ports:
-            - containerPort: 3128
+           - name: proxy
+             containerPort: 3128
+             protocol: TCP
+          securityContext:
+            allowPrivilegeEscalation: true
+            capabilities:
+              add:
+                - NET_BIND_SERVICE
+                - CHOWN
+                - SETUID
+                - SETGID
+              drop:
+                - all
+            readOnlyRootFilesystem: true
+          livenessProbe:
+            tcpSocket:
+              port: 3128
+            initialDelaySeconds: 30
+            failureThreshold: 6
       volumes:
-        - name: log
-          emptyDir: {}
         - name: cache
           emptyDir: {}
         - name: config
@@ -81,6 +111,9 @@ apiVersion: v1
 metadata:
   name: http-proxy
   namespace: dmz
+  labels:
+    k8s-app: http-proxy
+    kubernetes.io/name: dmz-http-proxy
 spec:
   selector:
     k8s-app: http-proxy

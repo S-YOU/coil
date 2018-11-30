@@ -46,6 +46,7 @@ GENERATED_FILES = \
 	$(OUTPUT)/bird-node1.conf \
 	$(OUTPUT)/bird-node2.conf \
 	$(OUTPUT)/rbac.yml $(OUTPUT)/deploy.yml \
+	$(OUTPUT)/dns-cache.yml $(OUTPUT)/http-proxy.yml \
 	$(COREOS_IMAGE) \
 
 all: test
@@ -158,6 +159,14 @@ $(OUTPUT)/rbac.yml: rbac.yml
 	cp $< $@
 
 $(OUTPUT)/deploy.yml: deploy.yml
+	mkdir -p $(OUTPUT)
+	cp $< $@
+
+$(OUTPUT)/http-proxy.yml: http-proxy.yml
+	mkdir -p $(OUTPUT)
+	cp $< $@
+
+$(OUTPUT)/dns-cache.yml: dns-cache.yml
 	mkdir -p $(OUTPUT)
 	cp $< $@
 
