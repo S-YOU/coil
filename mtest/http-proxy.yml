@@ -21,7 +21,6 @@ data:
     acl Safe_ports port 777         # multiling http
     acl Safe_ports port 80          # http
     acl SSL_ports port 443
-    coredump_dir /var/spool/squid
     http_access allow localhost
     http_access allow localhost manager
     http_access allow bootservers
@@ -39,7 +38,9 @@ data:
     refresh_pattern -i (/cgi-bin/|\?) 0     0%      0
     refresh_pattern (Release|Packages(.gz)*)$      0       20%     2880
     access_log stdio:/var/log/squid/access.log
-    cache_dir aufs /var/spool/squid 100 16 256
+    cache_dir aufs /tmp/cache 100 16 256
+    coredump_dir /tmp/cache
+    pid_filename /tmp/squid.pid
 ---
 kind: Deployment
 apiVersion: apps/v1
@@ -48,10 +49,6 @@ metadata:
   namespace: dmz
 spec:
   replicas: 2
-#  strategy:
-#    type: RollingUpdate
-#    rollingUpdate:
-#      maxUnavailable: 1
   selector:
     matchLabels:
       k8s-app: http-proxy
@@ -62,17 +59,17 @@ spec:
       labels:
         k8s-app: http-proxy
     spec:
-#      tolerations:
-#        - key: node-role.kubernetes.io/master
-#          effect: NoSchedule
-#        - key: CriticalAddonsOnly
-#          operator: Exists
+      tolerations:
+        - key: node-role.kubernetes.io/master
+          effect: NoSchedule
+        - key: CriticalAddonsOnly
+          operator: Exists
       containers:
         - name: squid
-          image: quay.io/mitz/squid:3.5.27-1-2
+          image: quay.io/cybozu/squid:3.5.27-1-2
           imagePullPolicy: IfNotPresent
           volumeMounts:
-            - mountPath: /var/spool/squid
+            - mountPath: /tmp
               name: cache
             - mountPath: /etc/squid
               name: config
@@ -81,7 +78,7 @@ spec:
              containerPort: 3128
              protocol: TCP
           securityContext:
-            allowPrivilegeEscalation: true
+            allowPrivilegeEscalation: false
             capabilities:
               add:
                 - NET_BIND_SERVICE
@@ -94,7 +91,8 @@ spec:
           livenessProbe:
             tcpSocket:
               port: 3128
-            initialDelaySeconds: 30
+            periodSeconds: 1
+            initialDelaySeconds: 10
             failureThreshold: 6
       volumes:
         - name: cache
