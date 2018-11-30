@@ -113,6 +113,7 @@ metadata:
     k8s-app: http-proxy
     kubernetes.io/name: dmz-http-proxy
 spec:
+  type: NodePort
   selector:
     k8s-app: http-proxy
   ports:
